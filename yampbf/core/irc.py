@@ -1,17 +1,21 @@
 from .network import IrcSocket
+from .resource import ResourceManager
+from .events import signal, slot
+
 class IrcConnection(object):
     """
     Represents a wrapper for the network class, provides convienience methods
     for irc such as msg and join/leave channels
     """
-    def __init__(self, name, server, port):
+    def __init__(self, name, server, port, r=ResourceManager()):
         assert server and port
-        self.connection = IrcSocket()
+        namespace = '%s!%s:' % (name, server)
+        self.connection = r.resource('%s socket' % namespace, IrcSocket)
+        def handshakedone(sock):
+            if sock == self.connection:
+                signal('connected', self)
+        slot('handshakedone', handshakedone)
         self.connection.connect((server, port), name, "%s@%s" % (name, server), server, name)
-
-        self.name = name
-        self.server = server
-        self.port = port
 
     def msgs_all(self, msgs, targets):
         """
@@ -32,7 +36,7 @@ class IrcConnection(object):
         '''
         Send a message to a target user or channel.
         '''
-        self.connection.send('PRIVMSG %s :%s' % (channel, message))
+        self.connection.send('PRIVMSG %s :%s' % (target, message))
 
     def join(self, channel):
         '''

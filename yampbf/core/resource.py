@@ -14,4 +14,12 @@ class ResourceManager(object):
         Generally, everything is kept. You may wish to alter this function if
         you desire otherwise, with whatever logic is necessary.
         '''
-        pass
+        self._resources = last._resources if last else {}
+    def resource(self, name, Func, *args, **kwargs):
+        '''
+        Returns the resource identified by `name' if it exists, or invokes
+        Func with *args and **kwargs if it does not.
+        '''
+        if name not in self._resources:
+            self._resources[name] = Func(*args, **kwargs)
+        return self._resources[name]

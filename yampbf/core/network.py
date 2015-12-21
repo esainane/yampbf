@@ -1,13 +1,9 @@
 import re
+import ssl
 import socket
 import logging
+import threading
 from .events import signal
-
-class Connection(object):
-    def connect(self):
-        pass
-    def resume(self, old):
-        pass
 
 class IrcSocket(object):
     '''
@@ -21,22 +17,31 @@ class IrcSocket(object):
         self.socket = None
         self.incomplete_buffer = ''
         self.buffer_size = b_size
+        self._connected = False
 
-    def connect(self, address, nick, ident, server, realname):
+    def connect(self, address, nick, ident, server, realname, insecure=False):
         '''
         Connect to a server.
         Sends NICK and USER messages.
         '''
+        if self._connected:
+            return
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        if not address[1] == 6667:
+            self.socket = ssl.wrap_socket(self.socket)
         self.socket.connect(address)
         self.send('NICK %s' % nick)
         self.send('USER %s %s %s :%s' % (nick, ident, server, realname))
+        self._connected = True
+        signal('handshakedone', self)
+        threading.Thread(target=self.run).start()
 
     def send(self, line, encoding="utf-8"):
         '''
         Send a line to the server.
         Formatted as required by rfc 1459
         '''
+        print('< %s' % line)
         line = line.replace('\r', '').replace('\n', '') + '\r\n'
         totalsent = 0
         while totalsent < len(line):
@@ -52,6 +57,7 @@ class IrcSocket(object):
         buffer_size = self.buffer_size
         d = self.socket.recv(buffer_size)
         data = d.decode('utf-8', 'replace')
+        print('> %s' % data)
         return data
 
     def process_data(self, data):
@@ -106,9 +112,9 @@ class IrcSocket(object):
         logging.debug('Cleaned message, prefix = %r, command = %r, params = %r, postfix = %r' % (prefix, command, params, postfix))
         return (prefix, command, params, postfix)
 
-    def get_messages(self):
+    def run(self):
         '''
-        Get a number of messages from the socket and return them in list form
+        Repeatedy get messages from the socket and signal them, one at a time
         '''
         result = self.process_data(self.recv())
         for line in result:
